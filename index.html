@@ -147,7 +147,7 @@
     <div>
       <h3>小狼底图</h3>
       <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer">
-        <input type="checkbox" id="wolfOn" onchange="toggleWolf()"> 显示小狼崽底图
+        <input type="checkbox" id="wolfOn" checked onchange="toggleWolf()"> 显示小狼崽底图
       </label>
       <button style="width:100%;margin-top:6px" onclick="stampWolf()">并入画布（转正为珠子）</button>
     </div>
@@ -203,7 +203,7 @@ let W=52, H=52, CELL=22;
 let grid = Array.from({length:H},()=>Array(W).fill(null));
 let cur = 'A1', tool = 'pen';
 let painting = false;
-let wolfOn = false;
+let wolfOn = true;   // 默认显示底图，进入页面即开启
 const WOLF = [[null,"F11","F11",null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"F11","F11",null],[null,"F11","F7","F11","F11",null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"F11","F11","F7","F11",null],["F11","F7","F7","F7","F7","F11",null,null,null,null,null,null,null,null,null,null,null,null,null,"F11","F7","F7","F7","F7","F11"],["F11","F7","F7","F7","F7","F7","F11",null,null,"F11","F11","F11","F11","F7","F7","F7",null,null,"F11","F7","F7","F7","F7","F7","F11"],["F11","F7","F7","F20","F11","F7","F7","F7","F11","F7","F7","F7","F7","F11","F11","F11","F7","F7","F7","F7","F11","F20","F7","F7","F11"],[null,"F11","F7","F20","F20","F11","F7","F7","F7","F7","F7","F11","F11","F7","F7","F11","F7","F7","F7","F11","F20","F20","F7","F11",null],[null,"F11","F7","F20","F20","F20","F11","F7","F7","F7","F7","F7","F7","F7","F7","F11","F11","F11","F11","F20","F20","F20","F7","F11",null],[null,"F11","F7","F20","F20","F11","F7","F7","F11","F7","F7","F7","F7","F7","F11","F7","F7","F7","F7","F11","F20","F20","F7","F11",null],["F11","F7","F7","F20","F11","F7","F7","F11","F11","F11","F11","F11","F7","F7","F7","F7","F7","F7","F11","F7","F11","F20","F7","F7","F11"],[null,"F11","F7","F11","F7","F7","F11","F7","F7","F7","F11","F7","F11","F11","F11","F7","F7","F7","F7","F7","F7","F11","F7","F11",null],["F11","F11","F7","F7","F7","F7","F11","F7","F7","F7","F11","F11","F7","F7","F7","F11","F11","F7","F11","F7","F7","F7","F7","F11","F11"],["F11","F7","F7","F7","F7","F7","F11","F7","F7","F7","F11","F7","F7","F7","F7","F7","F7","F11","F7","F7","F7","F7","F7","F7","F11"],["F11","F7","F7","F7","F7","F7","F11","F11","F7","F7","F11","F7","F7","F11","F11","F11","F11","F7","F7","F7","F11","F7","F7","F7","F11"],[null,"F11","F7","F7","F7","F11","F7","F11","F11","F11","F11","F7","F11","F7","F11","F11","F11","F11","F7","F7","F7","F11","F7","F11",null],["F11","F7","F7","F7","F11","F11","F11","E16","E16","E16","E16","F11","F11","F11","E16","E16","E16","E16","F11","F7","F11","F7","F7","F7","F11"],["F11","F7","F7","F11","F7","F7","E16","E16","E16","E16","E16","E16","E16","E16","E16","E16","E16","E16","E16","F7","F7","F7","F7","F7","F11"],[null,"F11","F7","F7","F7","F11","E16","E16","E16","E16","F11","E16","E16","E16","F11","E16","E16","E16","E16","F11","F7","F7","F7","F11",null],[null,"F11","F7","F7","F7","E16","E16","E16","E16","E16","E16","E16","E16","E16","E16","E16","E16","E16","E16","E16","F7","F7","F7","F11",null],[null,null,"F7","F11","F11","E16","E16","G12","G12","A5","E16","E16","E16","E16","E16","A5","G12","G12","E16","E16","F11","F11","F7",null,null],[null,"F11","E16","E16","E16","E16","E16","A5","A5","H2","E16","E16","E16","E16","E16","H2","A5","A5","E16","E16","E16","E16","E16","F11",null],[null,"F11","E16","E16","F11","E16","F24","F24","A15","A5","E16","E16","E16","E16","E16","A5","A15","F24","F24","E16","F11","E16","E16","F11",null],[null,null,"F11","E16","F11","F24","F24","F24","F24","E16","E16","E16","E16","E16","E16","E16","F24","F24","F24","F24","F11","E16","F11",null,null],[null,null,null,"F11","E16","F24","F24","F24","F24","E16","E16","E16","E16","M14","E16","E16","F24","F24","F24","F24","E16","F11",null,null,null],[null,null,null,"F11","E16","E16","F24","F24","E16","E16","E16","M14","M14","E16","E16","E16","E16","F24","F24","E16","E16","F11",null,null,null],[null,null,null,null,"F11","E16","E16","E16","E16","E16","E16","E16","E16","E16","E16","E16","E16","E16","E16","E16","F11",null,null,null,null],[null,null,null,null,null,"F11","F11","E16","E16","E16","E16","E16","E16","E16","E16","E16","E16","E16","F11","F11",null,null,null,null,null],[null,null,null,null,null,null,null,null,"F11","F11","F11","F11","F11","F11","F11","F11","F11",null,null,null,null,null,null,null,null]];
 const WH = WOLF.length, WW = WOLF[0].length;
 function wolfOff(){ return [Math.max(0,Math.floor((H-WH)/2)), Math.max(0,Math.floor((W-WW)/2))]; }
@@ -427,6 +427,7 @@ function clearAll(){
 /* ---------- 小狼底图 ---------- */
 function toggleWolf(){
   wolfOn = $('wolfOn').checked;
+  try{ localStorage.setItem('pb_wolf', wolfOn?'1':'0'); }catch(e){}   // 记住选择
   if(wolfOn && (W < 8 || H < 8)){ toast('画布太小，建议至少 25×27 再开底图'); }
   buildBoard();
   toast(wolfOn ? '小狼底图已显示，直接在上面涂色即可' : '底图已关闭');
@@ -443,6 +444,7 @@ function stampWolf(){
     if(gr<H && gc<W && !grid[gr][gc]){ grid[gr][gc]=v; n++; }
   }
   wolfOn = false; $('wolfOn').checked = false;
+  try{ localStorage.setItem('pb_wolf','0'); }catch(e){}
   buildBoard(); persist();
   toast('已并入 '+n+' 颗底图珠子');
 }
@@ -635,6 +637,10 @@ function toast(msg){
         $('inW').value=W; $('inH').value=H; }
     }
   }catch(e){}
+  // 底图默认显示；若用户上次主动关过则保持关闭
+  let wantWolf = true;
+  try{ wantWolf = localStorage.getItem('pb_wolf') !== '0'; }catch(e){}
+  $('wolfOn').checked = wantWolf; wolfOn = wantWolf;
   buildBoard(); renderWorks();
 })();
 </script>
