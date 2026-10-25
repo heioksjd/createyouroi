@@ -580,7 +580,10 @@ function showTpl(){
 function loadTpl(i){
   const t = TPL[i];
   if(grid.flat().some(Boolean) && !confirm('载入「'+t.name+'」会替换当前画布内容，继续？')) return;
-  hide('mTpl'); importCode(t.code);
+  hide('mTpl');
+  // 模板数据只存了网格，现场生成编码文本走导入流程（自动改尺寸/入撤销栈/持久化）
+  const code = t.grid.map(row=>row.map(v=>v||'.').join(' ')).join('\n');
+  importCode(code);
   toast('已载入模板「'+t.name+'」');
 }
 
