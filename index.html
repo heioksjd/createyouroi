@@ -103,7 +103,8 @@
   <button onclick="undo()" title="Ctrl+Z">↶ 撤销</button>
   <button onclick="redo()" title="Ctrl+Y">↷ 重做</button>
   <button onclick="showTpl()">示例模板</button>
-  <button onclick="exportPNG()">导出图片</button>
+  <button onclick="exportPattern()" title="正面 + 镜像图纸（带色号、每 5 格分隔线）">输出图纸</button>
+  <button onclick="exportPreview()" title="圆点预览图（不标色号）">输出预览图</button>
   <button onclick="showBill()">用料清单</button>
   <button onclick="saveWork()">保存作品</button>
   <span id="copyHint" style="font-size:12px;color:#3B6D11;display:none">已复制 ✓</span>
@@ -507,35 +508,30 @@ function doImport(){
 }
 
 /* ---------- 导出 ---------- */
-function exportPNG(){
-  const s=Math.max(16, Math.floor(1600/Math.max(W,H)));
-  const FOOT=Math.max(52, s*2.4);                 // 底部信息栏高度
+const BRAND='敖董的拼豆工坊 · https://heioksjd.github.io/createyouroi/';
+
+function beadTotal(){ let n=0; for(let r=0;r<H;r++) for(let c=0;c<W;c++) if(grid[r][c]) n++; return n; }
+function canvas2d(w,h){
   const cv=document.createElement('canvas');
-  cv.width=W*s; cv.height=H*s+FOOT;
+  cv.width=Math.max(1,Math.round(w)); cv.height=Math.max(1,Math.round(h));
   const ctx=cv.getContext('2d');
   ctx.fillStyle='#FFFFFF'; ctx.fillRect(0,0,cv.width,cv.height);
-  // 方框网格：每格色块 + 色号文字（与图纸 PNG 同风格）
-  let total=0;
-  for(let r=0;r<H;r++) for(let c=0;c<W;c++){
-    const v=grid[r][c]; if(v) total++;
-    const x=c*s, y=r*s;
-    ctx.fillStyle=v?PAL[v]:'#FFFFFF'; ctx.fillRect(x,y,s,s);
-    ctx.strokeStyle='#C9CDD3'; ctx.lineWidth=1;
-    ctx.strokeRect(x+.5,y+.5,s-1,s-1);
-    if(v && s>=18){
-      ctx.fillStyle = LUM[v]>150?'rgba(0,0,0,.75)':'rgba(255,255,255,.95)';
-      ctx.font='600 '+(s*0.34)+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText(v, x+s/2, y+s/2+s*0.02);
-    }
-  }
-  ctx.strokeStyle='#111827'; ctx.lineWidth=2;
-  ctx.strokeRect(1,1,W*s-2,H*s-2);
-  // 底部：左侧站点头像 + 尺寸/豆数 + 网站地址
-  const fy=H*s;
+  return {cv,ctx};
+}
+// 每 5 行 / 每 5 列加粗分隔线：画在格子边界，不压格内色号（与离线图纸同口径）
+function fiveLines(ctx, ox, oy, s, cols, rows){
+  ctx.save();
+  ctx.strokeStyle='rgba(72,84,98,.5)'; ctx.lineWidth = s>=16 ? 2 : 1;
+  ctx.beginPath();
+  for(let c=5;c<cols;c+=5){ const x=Math.round(ox+c*s)+.5; ctx.moveTo(x,oy); ctx.lineTo(x,oy+rows*s); }
+  for(let r=5;r<rows;r+=5){ const y=Math.round(oy+r*s)+.5; ctx.moveTo(ox,y); ctx.lineTo(ox+cols*s,y); }
+  ctx.stroke(); ctx.restore();
+}
+// 底部信息栏：站点头像 + 尺寸/豆数 + 网址
+function drawFooter(ctx, cv, fy, footH, s){
   ctx.strokeStyle='#E5E7EB'; ctx.lineWidth=1;
   ctx.beginPath(); ctx.moveTo(0,fy+.5); ctx.lineTo(cv.width,fy+.5); ctx.stroke();
-  // 头像：8×8 珠子画在左下角
-  const cs=FOOT*0.82/LOGOPAT.length, lx=14, ly=fy+(FOOT-cs*LOGOPAT.length)/2;
+  const cs=footH*0.82/LOGOPAT.length, lx=14, ly=fy+(footH-cs*LOGOPAT.length)/2;
   for(let r=0;r<LOGOPAT.length;r++) for(let c=0;c<LOGOPAT[r].length;c++){
     const v=LOGOPAT[r][c]; if(!v) continue;
     ctx.beginPath(); ctx.arc(lx+c*cs+cs/2, ly+r*cs+cs/2, cs*0.45, 0, 7);
@@ -544,12 +540,144 @@ function exportPNG(){
   ctx.fillStyle='#6B7280'; ctx.textAlign='center'; ctx.textBaseline='middle';
   const fs=Math.max(15, Math.min(26, s*0.95));
   ctx.font='600 '+fs+'px sans-serif';
-  ctx.fillText(W+' × '+H+' 格 · '+total+' 颗', cv.width/2, fy+FOOT*0.34);
+  ctx.fillText(W+' × '+H+' 格 · '+beadTotal()+' 颗', cv.width/2, fy+footH*0.34);
   ctx.fillStyle='#9CA3AF'; ctx.font=fs+'px sans-serif';
-  ctx.fillText('敖董的拼豆工坊 · https://heioksjd.github.io/createyouroi/', cv.width/2, fy+FOOT*0.72);
+  ctx.fillText(BRAND, cv.width/2, fy+footH*0.72);
+}
+function downloadCanvas(cv, name){
   const a=document.createElement('a');
-  a.download='拼豆图纸-'+W+'x'+H+'.png'; a.href=cv.toDataURL('image/png'); a.click();
-  toast('图片已导出');
+  a.download=name; a.href=cv.toDataURL('image/png'); a.click();
+}
+
+// ===== 输出图纸：正面 + 镜像，方框色块 + 色号 + 每 5 格分隔线 =====
+function buildPatternCanvas(){
+  const total=beadTotal();
+  let s=Math.floor(2000/Math.max(W,40));
+  s=Math.max(10, Math.min(22, s));
+  s=Math.max(7, Math.min(s, Math.floor(2900/(H*2))));   // 两联竖向不超高
+  const PAD=Math.max(18, Math.round(s*1.2));
+  const gridW=W*s, gridH=H*s;
+  const titleFs=Math.max(20, Math.round(s*1.2)), subFs=Math.max(12, Math.round(s*0.72));
+  const headH=titleFs+subFs+26;
+  const labelFs=Math.max(12, Math.round(s*0.78)), labelH=labelFs+12;
+  const gap=Math.round(s*1.1);
+  const footH=Math.max(52, s*2.4);
+  const cvW=PAD*2+gridW;
+
+  // 图例折行预排
+  const cnt={}; for(let r=0;r<H;r++) for(let c=0;c<W;c++){ const v=grid[r][c]; if(v) cnt[v]=(cnt[v]||0)+1; }
+  const ents=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]).map(k=>({code:k,n:cnt[k]}));
+  const lgFs=Math.max(12, Math.round(s*0.86)), chip=Math.round(lgFs*0.95), itemGap=Math.round(lgFs*1.2);
+  const mctx=document.createElement('canvas').getContext('2d');
+  mctx.font='600 '+lgFs+'px sans-serif';
+  const items=ents.map(e=>({e, w:chip+6+mctx.measureText(e.code+' ×'+e.n).width}));
+  const maxW=cvW-PAD*2, lines=[]; let cur=[], curW=0;
+  items.forEach(it=>{
+    const add=(cur.length?itemGap:0)+it.w;
+    if(cur.length && curW+add>maxW){ lines.push({items:cur,w:curW}); cur=[it]; curW=it.w; }
+    else { cur.push(it); curW+=add; }
+  });
+  if(cur.length) lines.push({items:cur,w:curW});
+  const legendH=lines.length ? lines.length*(lgFs+12)+4 : 0;
+
+  const cvH=PAD+headH+labelH+gridH+gap+labelH+gridH+(legendH?gap+legendH:0)+6+footH;
+  const {cv,ctx}=canvas2d(cvW,cvH);
+
+  // 标题
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle='#111827'; ctx.font='700 '+titleFs+'px sans-serif';
+  ctx.fillText('拼豆图纸', PAD, PAD);
+  ctx.fillStyle='#6B7280'; ctx.font=subFs+'px sans-serif';
+  ctx.fillText(W+' × '+H+' 格 · '+total+' 颗 · 正面 + 镜像（左右翻转）', PAD, PAD+titleFs+7);
+
+  const drawLabel=(txt,ly)=>{
+    ctx.fillStyle='#374151'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.font='600 '+labelFs+'px sans-serif'; ctx.fillText(txt, PAD, ly);
+  };
+  const drawSheet=(oy, mirror)=>{
+    for(let r=0;r<H;r++) for(let c=0;c<W;c++){
+      const v=grid[r][ mirror ? W-1-c : c];
+      const x=PAD+c*s, y=oy+r*s;
+      ctx.fillStyle=v?PAL[v]:'#FFFFFF'; ctx.fillRect(x,y,s,s);
+      ctx.strokeStyle='#C9CDD3'; ctx.lineWidth=1;
+      ctx.strokeRect(x+.5,y+.5,s-1,s-1);
+      if(v && s>=16){
+        ctx.fillStyle=LUM[v]>150?'rgba(0,0,0,.72)':'rgba(255,255,255,.94)';
+        ctx.font='600 '+Math.round(s*0.34)+'px sans-serif';
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(v, x+s/2, y+s/2+s*0.02);
+      }
+    }
+    fiveLines(ctx, PAD, oy, s, W, H);
+    ctx.strokeStyle='#111827'; ctx.lineWidth=2;
+    ctx.strokeRect(PAD+1, oy+1, gridW-2, gridH-2);
+  };
+
+  let y=PAD+headH;
+  drawLabel('正面', y); y+=labelH;
+  drawSheet(y,false); y+=gridH+gap;
+  drawLabel('镜像（左右翻转）', y); y+=labelH;
+  drawSheet(y,true); y+=gridH;
+
+  // 图例
+  if(lines.length){
+    y+=gap;
+    lines.forEach((ln,i)=>{
+      let x=PAD; const ly=y+i*(lgFs+12);
+      ln.items.forEach(it=>{
+        ctx.fillStyle=PAL[it.e.code]||'#ccc'; ctx.fillRect(x, ly+2, chip, chip);
+        ctx.strokeStyle='#D1D5DB'; ctx.lineWidth=1; ctx.strokeRect(x+.5, ly+2.5, chip-1, chip-1);
+        ctx.fillStyle='#374151'; ctx.textAlign='left'; ctx.textBaseline='middle';
+        ctx.font='600 '+lgFs+'px sans-serif';
+        ctx.fillText(it.e.code+' ×'+it.e.n, x+chip+6, ly+2+chip/2);
+        x+=it.w+itemGap;
+      });
+    });
+  }
+  drawFooter(ctx, cv, cvH-footH, footH, s);
+  return cv;
+}
+function exportPattern(){
+  const cv=buildPatternCanvas();
+  downloadCanvas(cv, '拼豆图纸-'+W+'x'+H+'.png');
+  toast('图纸已导出（正面 + 镜像）');
+}
+
+// ===== 输出预览图：圆点形式，不标色号 =====
+function buildPreviewCanvas(){
+  const total=beadTotal();
+  let s=Math.max(8, Math.min(26, Math.floor(1500/Math.max(W,H))));
+  const PAD=Math.max(24, Math.round(s*1.6));
+  const titleFs=Math.max(16, Math.round(s*1.05)), subFs=Math.max(11, Math.round(s*0.62));
+  const headH=titleFs+subFs+22;
+  const footH=Math.max(46, s*2.2);
+  const cvW=PAD*2+W*s, cvH=PAD+headH+H*s+PAD+footH;
+  const {cv,ctx}=canvas2d(cvW,cvH);
+
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillStyle='#111827'; ctx.font='700 '+titleFs+'px sans-serif';
+  ctx.fillText('拼豆预览', PAD, PAD);
+  ctx.fillStyle='#9CA3AF'; ctx.font=subFs+'px sans-serif';
+  ctx.fillText(W+' × '+H+' 格 · '+total+' 颗', PAD, PAD+titleFs+6);
+
+  const ox=PAD, oy=PAD+headH;
+  for(let r=0;r<H;r++) for(let c=0;c<W;c++){
+    const v=grid[r][c], cx=ox+c*s+s/2, cy=oy+r*s+s/2;
+    if(!v){
+      ctx.beginPath(); ctx.arc(cx,cy,s*0.4,0,7);
+      ctx.strokeStyle='#EFF1F4'; ctx.lineWidth=Math.max(1,s*0.05); ctx.stroke();
+      continue;
+    }
+    ctx.beginPath(); ctx.arc(cx,cy,s*0.44,0,7); ctx.fillStyle=PAL[v]; ctx.fill();
+    ctx.beginPath(); ctx.arc(cx-s*0.13,cy-s*0.15,s*0.17,0,7); ctx.fillStyle='rgba(255,255,255,.45)'; ctx.fill();
+  }
+  drawFooter(ctx, cv, cvH-footH, footH, s);
+  return cv;
+}
+function exportPreview(){
+  const cv=buildPreviewCanvas();
+  downloadCanvas(cv, '拼豆预览-'+W+'x'+H+'.png');
+  toast('预览图已导出');
 }
 function showBill(){
   const cnt={};
